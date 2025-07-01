@@ -1,8 +1,11 @@
-'use server';
 import admin from 'firebase-admin';
 
-// This check prevents re-initialization in a hot-reload environment
-if (!admin.apps.length) {
+// This function ensures that Firebase Admin is initialized only once.
+const initializeAdmin = () => {
+  if (admin.apps.length > 0) {
+    return admin.apps[0];
+  }
+
   try {
     const serviceAccount = {
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -12,17 +15,32 @@ if (!admin.apps.length) {
     };
 
     if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-        throw new Error("Firebase admin credentials not found in environment variables.");
+        console.warn("Firebase admin credentials not found or incomplete in environment variables. Skipping admin initialization.");
+        return null;
     }
 
-    admin.initializeApp({
+    return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
-    console.log('Firebase Admin SDK initialized successfully.');
   } catch (error: any) {
     console.error('Firebase admin initialization error:', error.message);
+    return null;
   }
-}
+};
 
-export const adminDb = admin.firestore();
-export const adminMessaging = admin.messaging();
+const adminApp = initializeAdmin();
+
+// Export getter functions instead of the raw objects
+export const getAdminDb = () => {
+  if (!adminApp) {
+    throw new Error("Firebase Admin SDK not initialized. Check server logs for details.");
+  }
+  return adminApp.firestore();
+};
+
+export const getAdminMessaging = () => {
+  if (!adminApp) {
+    throw new Error("Firebase Admin SDK not initialized. Check server logs for details.");
+  }
+  return adminApp.messaging();
+};
