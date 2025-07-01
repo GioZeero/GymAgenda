@@ -10,7 +10,7 @@ import { AddSlotModal } from './add-slot-modal';
 import { DeleteSlotModal } from './delete-slot-modal';
 import type { DayOfWeek, DaySchedule, Slot } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
-import { collection, doc, onSnapshot, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from './ui/skeleton';
 import { ThemeToggle } from './theme-toggle';
@@ -93,7 +93,7 @@ export default function AgendaView() {
   }, [router]);
 
   useEffect(() => {
-    if (!user) return; // Non fare nulla se l'utente non è ancora caricato
+    if (!user) return;
 
     if (!db) {
         console.warn("Il database Firestore non è disponibile.");
@@ -107,8 +107,8 @@ export default function AgendaView() {
     
     const unsubscribe = onSnapshot(scheduleCol, (querySnapshot) => {
         if (querySnapshot.empty) {
-          // Se la collezione è vuota, la inizializza con i dati predefiniti
           const setupInitialSchedule = async () => {
+            if (!db) return;
             const batch = writeBatch(db);
             initialScheduleData.forEach(daySchedule => {
               const { day, ...dataToSet } = daySchedule;
@@ -120,7 +120,6 @@ export default function AgendaView() {
           setupInitialSchedule();
           setSchedule(initialScheduleData);
         } else {
-          // Se esistono dati, li mappa nel nostro stato
           const scheduleData = querySnapshot.docs.map(docSnapshot => {
             const data = docSnapshot.data();
             const transformSlot = (slot: any): Slot => ({
@@ -144,11 +143,10 @@ export default function AgendaView() {
         setLoading(false);
     }, (error) => {
         console.error("Errore con il listener in tempo reale della pianificazione: ", error);
-        setSchedule(initialScheduleData); // Torna ai dati iniziali in caso di errore
+        setSchedule(initialScheduleData);
         setLoading(false);
     });
 
-    // Pulizia: Annulla l'iscrizione al listener quando il componente viene smontato
     return () => unsubscribe();
   }, [user]);
 
@@ -159,65 +157,70 @@ export default function AgendaView() {
 
   const handleAddSlot = async (day: DayOfWeek, period: 'morning' | 'afternoon', timeRange: string) => {
     if (!db || !user) return;
-    const originalSchedule = [...schedule];
     const dayRef = doc(db, 'schedule', day);
-    const dayData = schedule.find(d => d.day === day);
-    if (!dayData) return;
-
-    const newSlot: Slot = { id: `${day}-${period}-${Date.now()}`, timeRange, bookedBy: [], createdBy: user.name };
-    const updatedPeriodSlots = [...dayData[period], newSlot].sort((a,b) => a.timeRange.localeCompare(b.timeRange));
-    
-    const updatedDay = { ...dayData, [period]: updatedPeriodSlots, isOpen: true };
-    
-    // Lo stato si aggiornerà automaticamente grazie al listener onSnapshot, 
-    // ma possiamo aggiornarlo localmente per una UI più reattiva
-    setSchedule(currentSchedule => currentSchedule.map(d => (d.day === day ? updatedDay : d)));
 
     try {
-        await updateDoc(dayRef, { [period]: updatedPeriodSlots, isOpen: true });
+        await runTransaction(db, async (transaction) => {
+            const dayDoc = await transaction.get(dayRef);
+            if (!dayDoc.exists()) {
+                throw new Error(`Documento per ${day} non esiste.`);
+            }
+
+            const data = dayDoc.data();
+            const currentPeriodSlots: Slot[] = data[period] || [];
+            
+            const newSlot: Slot = { id: `${day}-${period}-${Date.now()}`, timeRange, bookedBy: [], createdBy: user.name };
+            
+            const updatedPeriodSlots = [...currentPeriodSlots, newSlot].sort((a,b) => a.timeRange.localeCompare(b.timeRange));
+
+            transaction.update(dayRef, { [period]: updatedPeriodSlots, isOpen: true });
+        });
+
         await sendNotification({
             targetRole: 'client',
             title: 'Nuovi orari disponibili!',
             body: `È stato aggiunto un nuovo orario per ${day}: ${timeRange}`,
         });
     } catch (error) {
-        console.error("Error adding slot: ", error);
-        setSchedule(originalSchedule); // Revert on error
+        console.error("Errore nell'aggiungere l'orario: ", error);
     }
   };
 
   const handleBookSlot = async (slotToBook: Slot) => {
     if (!db || !user) return;
-    const originalSchedule = [...schedule];
+    
     const dayOfWeek = schedule.find(day => day.morning.some(s => s.id === slotToBook.id) || day.afternoon.some(s => s.id === slotToBook.id))?.day;
-
     if (!dayOfWeek) return;
 
     const dayRef = doc(db, 'schedule', dayOfWeek);
-    const dayData = schedule.find(d => d.day === dayOfWeek);
-    if (!dayData) return;
 
-    const isBooking = !slotToBook.bookedBy.includes(user.name);
-
-    const updateSlots = (slots: Slot[]) => {
-      return slots.map(s => {
-        if (s.id === slotToBook.id) {
-          const isBooked = s.bookedBy.includes(user.name);
-          if (isBooked) {
-            return { ...s, bookedBy: s.bookedBy.filter(name => name !== user.name) };
-          } else {
-            return { ...s, bookedBy: [...s.bookedBy, user.name].sort() };
-          }
-        }
-        return s;
-      });
-    };
-
-    const updatedMorning = updateSlots(dayData.morning);
-    const updatedAfternoon = updateSlots(dayData.afternoon);
-    
     try {
-        await updateDoc(dayRef, { morning: updatedMorning, afternoon: updatedAfternoon });
+        const isBooking = !slotToBook.bookedBy.includes(user.name);
+
+        await runTransaction(db, async (transaction) => {
+            const dayDoc = await transaction.get(dayRef);
+            if (!dayDoc.exists()) {
+                throw "Il documento non esiste!";
+            }
+
+            const data = dayDoc.data();
+            const updateSlots = (slots: Slot[]): Slot[] => {
+                return slots.map(s => {
+                    if (s.id === slotToBook.id) {
+                        const newBookedBy = s.bookedBy.includes(user.name)
+                            ? s.bookedBy.filter(name => name !== user.name)
+                            : [...s.bookedBy, user.name].sort();
+                        return { ...s, bookedBy: newBookedBy };
+                    }
+                    return s;
+                });
+            };
+
+            const updatedMorning = updateSlots(data.morning || []);
+            const updatedAfternoon = updateSlots(data.afternoon || []);
+            transaction.update(dayRef, { morning: updatedMorning, afternoon: updatedAfternoon });
+        });
+
         if (isBooking) {
             await sendNotification({
                 targetRole: 'owner',
@@ -226,29 +229,35 @@ export default function AgendaView() {
             });
         }
     } catch (error) {
-        console.error("Error booking slot: ", error);
-        // Lo stato si ripristinerà automaticamente grazie al listener in caso di errore
+        console.error("Errore nella prenotazione: ", error);
     }
   };
 
   const handleDeleteSlot = async (day: DayOfWeek, period: 'morning' | 'afternoon', slotId: string) => {
     if (!db) return;
     const dayRef = doc(db, 'schedule', day);
-    const dayData = schedule.find(d => d.day === day);
-    if (!dayData) return;
 
-    const updatedPeriodSlots = dayData[period].filter(slot => slot.id !== slotId);
-    
-    const otherPeriod = period === 'morning' ? 'afternoon' : 'morning';
-    const dayIsOpen = updatedPeriodSlots.length > 0 || dayData[otherPeriod].length > 0;
-    
     try {
-        await updateDoc(dayRef, { [period]: updatedPeriodSlots, isOpen: dayIsOpen });
+        await runTransaction(db, async (transaction) => {
+            const dayDoc = await transaction.get(dayRef);
+            if (!dayDoc.exists()) return;
+
+            const data = dayDoc.data();
+            const currentPeriodSlots: Slot[] = data[period] || [];
+            const otherPeriodSlots: Slot[] = data[period === 'morning' ? 'afternoon' : 'morning'] || [];
+
+            const updatedPeriodSlots = currentPeriodSlots.filter(slot => slot.id !== slotId);
+            const dayIsOpen = updatedPeriodSlots.length > 0 || otherPeriodSlots.length > 0;
+
+            transaction.update(dayRef, { [period]: updatedPeriodSlots, isOpen: dayIsOpen });
+        });
+        
         setIsDeleteModalOpen(false);
     } catch (error) {
-        console.error("Error deleting slot: ", error);
+        console.error("Errore nella cancellazione: ", error);
     }
   };
+
 
   if (checkingAuth || !user) {
     return (
@@ -398,7 +407,7 @@ export default function AgendaView() {
                         </div>
                       </div>
                       <div className="space-y-3">
-                        <h3 className="font-semibold text-lg flex items-center gap-2"><Moon className="text-blue-400" /> Pomeriggio</h3>
+                        <h3 className="font-semibold text-lg flex items-center gap-2"><Moon className="text-primary" /> Pomeriggio</h3>
                         <div className="flex flex-wrap gap-2">
                           {daySchedule.afternoon.length > 0 ? daySchedule.afternoon.map(renderSlot) : <p className="text-sm text-muted-foreground">Nessun orario per il pomeriggio.</p>}
                         </div>
