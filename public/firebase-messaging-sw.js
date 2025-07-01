@@ -1,40 +1,40 @@
-// NOTA: questo file deve trovarsi nella cartella `public`.
-// Viene registrato da `src/lib/firebase-client.ts`.
+// These scripts are imported from the web, not from node_modules.
+// Use versions compatible with the Firebase SDK version in package.json
+importScripts("https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/9.15.0/firebase-messaging-compat.js");
 
-// Questi script sono necessari per far funzionare Firebase in un service worker.
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+// This is a special variable that gives us access to the service worker's URL.
+const urlParams = new URL(self.location).searchParams;
+const firebaseConfigStr = urlParams.get('firebaseConfig');
 
-// Il service worker viene caricato con un parametro query contenente la configurazione di Firebase.
-const urlParams = new URLSearchParams(self.location.search);
-const firebaseConfigParam = urlParams.get('firebaseConfig');
+if (firebaseConfigStr) {
+  try {
+    const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigStr));
+    
+    // Initialize the Firebase app in the service worker with the config.
+    firebase.initializeApp(firebaseConfig);
 
-if (firebaseConfigParam) {
-    const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigParam));
-    
-    // Inizializza Firebase
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    
-        const messaging = firebase.messaging();
-    
-        // Questo gestore verrà chiamato quando viene ricevuta una notifica push
-        // mentre l'app è in background.
-        messaging.onBackgroundMessage((payload) => {
-          console.log('[firebase-messaging-sw.js] Ricevuto messaggio in background ', payload);
-          
-          if (payload.notification) {
-            const notificationTitle = payload.notification.title;
-            const notificationOptions = {
-              body: payload.notification.body,
-              // Puoi aggiungere un'icona qui se ne hai una nella tua cartella public.
-              // Esempio: icon: '/icon-192.png'
-            };
-      
-            self.registration.showNotification(notificationTitle, notificationOptions);
-          }
-        });
-    }
+    // Retrieve an instance of Firebase Messaging so that it can handle background messages.
+    const messaging = firebase.messaging();
+
+    messaging.onBackgroundMessage((payload) => {
+      console.log(
+        "[firebase-messaging-sw.js] Received background message ",
+        payload
+      );
+
+      // Customize the notification here from the payload
+      const notificationTitle = payload.notification.title;
+      const notificationOptions = {
+        body: payload.notification.body,
+        // You can add an icon here, e.g., icon: '/icon.png'
+      };
+
+      self.registration.showNotification(notificationTitle, notificationOptions);
+    });
+  } catch(e) {
+    console.error("Error initializing Firebase in service worker", e);
+  }
 } else {
-    console.error('Configurazione Firebase non trovata nei parametri query del service worker.');
+  console.error("Firebase config not found in service worker query params.");
 }
