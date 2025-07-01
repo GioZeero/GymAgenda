@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     const message = {
-      notification: {
+      data: {
         title,
         body,
       },
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const tokensToDelete: string[] = [];
 
     for (const chunk of tokenChunks) {
-        const response = await adminMessaging.sendEachForMulticast({ ...message, tokens: chunk });
+        const response = await adminMessaging.sendEachForMulticast({ data: message.data, tokens: chunk });
         successCount += response.successCount;
         failureCount += response.failureCount;
 
@@ -50,7 +50,6 @@ export async function POST(request: Request) {
                 if (!resp.success) {
                     console.error(`Failed to send to token: ${chunk[idx]}`, resp.error);
                     const errorCode = resp.error?.code;
-                    // Check for errors that indicate an invalid or unregistered token
                     if (
                         errorCode === 'messaging/invalid-registration-token' ||
                         errorCode === 'messaging/registration-token-not-registered'
@@ -63,31 +62,28 @@ export async function POST(request: Request) {
     }
 
     if (tokensToDelete.length > 0) {
-        console.log(`Found ${tokensToDelete.length} invalid tokens to delete.`);
+        console.log(`Found ${tokensToDelete.length} invalid tokens to clean up.`);
+        const batch = adminDb.batch();
         const subscriptionsRef = adminDb.collection('subscriptions');
-        const deletePromises: Promise<void>[] = [];
+        
+        // Firestore 'in' query is limited to 30 items, so we process in chunks if necessary
+        const deleteChunks = [];
+        for (let i = 0; i < tokensToDelete.length; i += 30) {
+            deleteChunks.push(tokensToDelete.slice(i, i + 30));
+        }
 
-        for (const token of tokensToDelete) {
-            const q = subscriptionsRef.where('token', '==', token);
-            const deletePromise = q.get().then(snapshot => {
-                if (snapshot.empty) {
-                    console.log(`Token ${token.substring(0, 10)}... not found in DB, might have been deleted already.`);
-                    return;
-                }
-                snapshot.docs.forEach(doc => {
-                    console.log(`Attempting to delete subscription doc: ${doc.id} for invalid token ${token.substring(0, 10)}...`);
-                    deletePromises.push(doc.ref.delete());
-                });
+        for (const deleteChunk of deleteChunks) {
+            const q = subscriptionsRef.where('token', 'in', deleteChunk);
+            const snapshot = await q.get();
+            snapshot.docs.forEach(doc => {
+                console.log(`Queueing deletion for doc: ${doc.id}`);
+                batch.delete(doc.ref);
             });
-            deletePromises.push(deletePromise);
         }
         
-        await Promise.all(deletePromises).catch(err => {
-            console.error("Error during batch deletion of invalid tokens:", err);
-        });
-        console.log("Finished invalid token cleanup process.");
+        await batch.commit();
+        console.log(`Finished invalid token cleanup process. Deleted subscriptions for ${tokensToDelete.length} tokens.`);
     }
-
 
     return NextResponse.json({ success: true, successCount, failureCount });
 
