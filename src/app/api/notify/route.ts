@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminDb, adminMessaging } from '@/lib/firebase-admin';
+import { getAdminDb, getAdminMessaging } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
@@ -8,6 +8,9 @@ export async function POST(request: Request) {
     if (!targetRole || !title || !body) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
+
+    const adminDb = getAdminDb();
+    const adminMessaging = getAdminMessaging();
 
     const subscriptionsSnapshot = await adminDb.collection('subscriptions').where('role', '==', targetRole).get();
 
