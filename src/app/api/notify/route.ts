@@ -24,7 +24,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, message: 'No valid tokens found.' });
     }
     
-    // FCM has a limit of 500 tokens per multicast message
     const tokenChunks = [];
     for (let i = 0; i < tokens.length; i += 500) {
         tokenChunks.push(tokens.slice(i, i + 500));
@@ -63,29 +62,32 @@ export async function POST(request: Request) {
         }
     }
 
-    // After the loop, delete all the invalid tokens found
     if (tokensToDelete.length > 0) {
-        console.log(`Deleting ${tokensToDelete.length} invalid tokens...`);
+        console.log(`Found ${tokensToDelete.length} invalid tokens to delete.`);
         const subscriptionsRef = adminDb.collection('subscriptions');
-        // Firestore 'in' query can handle up to 30 items at a time
-        const deleteBatches: Promise<any>[] = [];
-        for (let i = 0; i < tokensToDelete.length; i += 30) {
-            const batchTokens = tokensToDelete.slice(i, i + 30);
-            const q = subscriptionsRef.where('token', 'in', batchTokens);
+        const deletePromises: Promise<void>[] = [];
+
+        for (const token of tokensToDelete) {
+            const q = subscriptionsRef.where('token', '==', token);
             const deletePromise = q.get().then(snapshot => {
-                if (snapshot.empty) return;
-                const batch = adminDb.batch();
+                if (snapshot.empty) {
+                    console.log(`Token ${token.substring(0, 10)}... not found in DB, might have been deleted already.`);
+                    return;
+                }
                 snapshot.docs.forEach(doc => {
-                    batch.delete(doc.ref);
+                    console.log(`Attempting to delete subscription doc: ${doc.id} for invalid token ${token.substring(0, 10)}...`);
+                    deletePromises.push(doc.ref.delete());
                 });
-                return batch.commit();
             });
-            deleteBatches.push(deletePromise);
+            deletePromises.push(deletePromise);
         }
-        await Promise.all(deleteBatches).catch(err => {
-            console.error("Error batch deleting invalid tokens:", err);
+        
+        await Promise.all(deletePromises).catch(err => {
+            console.error("Error during batch deletion of invalid tokens:", err);
         });
+        console.log("Finished invalid token cleanup process.");
     }
+
 
     return NextResponse.json({ success: true, successCount, failureCount });
 
