@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Calendar, Clock, Plus, User, Trash2, Sun, Moon, LogOut } from 'lucide-react';
+import { Calendar, Clock, Plus, User, Trash2, Sun, Moon, LogOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AddSlotModal } from './add-slot-modal';
@@ -75,6 +75,7 @@ export default function AgendaView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [modalPeriod, setModalPeriod] = useState<'morning' | 'afternoon'>('morning');
+  const [bookingSlotId, setBookingSlotId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -187,14 +188,19 @@ export default function AgendaView() {
   };
 
   const handleBookSlot = async (slotToBook: Slot) => {
-    if (!db || !user) return;
+    if (!db || !user || bookingSlotId === slotToBook.id) return;
+
+    setBookingSlotId(slotToBook.id);
 
     const dayOfWeek = schedule.find(day => 
         day.morning.some(s => s.id === slotToBook.id) || 
         day.afternoon.some(s => s.id === slotToBook.id)
     )?.day;
 
-    if (!dayOfWeek) return;
+    if (!dayOfWeek) {
+        setBookingSlotId(null);
+        return;
+    }
 
     const dayRef = doc(db, 'schedule', dayOfWeek);
 
@@ -239,9 +245,10 @@ export default function AgendaView() {
         });
     } catch (error) {
         console.error("Errore nella transazione di prenotazione: ", error);
+    } finally {
+        setBookingSlotId(null);
     }
   };
-
 
   const handleDeleteSlot = async (day: DayOfWeek, period: 'morning' | 'afternoon', slotId: string) => {
     if (!db) return;
@@ -317,13 +324,23 @@ export default function AgendaView() {
     }
 
     const isBookedByUser = slot.bookedBy.includes(user.name);
+    const isLoading = bookingSlotId === slot.id;
+
     return (
         <Popover key={slot.id}>
             <PopoverTrigger asChild>
-                <Button variant={isBookedByUser ? "secondary" : "default"} className="flex-grow transition-all duration-300">
-                    <Clock className="mr-2 h-4 w-4" />
+                <Button 
+                    variant={isBookedByUser ? "secondary" : "default"} 
+                    className="flex-grow transition-all duration-300"
+                    disabled={isLoading}
+                >
+                    {isLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <Clock className="mr-2 h-4 w-4" />
+                    )}
                     {slot.timeRange}
-                    {slot.bookedBy.length > 0 && <Badge variant="outline" className="ml-2">{slot.bookedBy.length}</Badge>}
+                    {slot.bookedBy.length > 0 && !isLoading && <Badge variant="outline" className="ml-2">{slot.bookedBy.length}</Badge>}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-4">
@@ -345,8 +362,12 @@ export default function AgendaView() {
                         </div>
                     )}
 
-                    <Button onClick={() => handleBookSlot(slot)} className="w-full" size="sm">
-                        {isBookedByUser ? 'Cancella prenotazione' : 'Prenota ora'}
+                    <Button onClick={() => handleBookSlot(slot)} className="w-full" size="sm" disabled={isLoading}>
+                         {isLoading ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Attendere...</>
+                        ) : (
+                            isBookedByUser ? 'Cancella prenotazione' : 'Prenota ora'
+                        )}
                     </Button>
                 </div>
             </PopoverContent>
