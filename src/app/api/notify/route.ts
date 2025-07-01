@@ -39,6 +39,7 @@ export async function POST(request: Request) {
 
     let successCount = 0;
     let failureCount = 0;
+    const tokensToDelete: string[] = [];
 
     for (const chunk of tokenChunks) {
         const response = await adminMessaging.sendEachForMulticast({ ...message, tokens: chunk });
@@ -46,15 +47,44 @@ export async function POST(request: Request) {
         failureCount += response.failureCount;
 
         if (response.failureCount > 0) {
-            const failedTokens: string[] = [];
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) {
-                    failedTokens.push(chunk[idx]);
                     console.error(`Failed to send to token: ${chunk[idx]}`, resp.error);
+                    const errorCode = resp.error?.code;
+                    // Check for errors that indicate an invalid or unregistered token
+                    if (
+                        errorCode === 'messaging/invalid-registration-token' ||
+                        errorCode === 'messaging/registration-token-not-registered'
+                    ) {
+                        tokensToDelete.push(chunk[idx]);
+                    }
                 }
             });
-            // Optional: You could add logic here to remove invalid tokens from your database
         }
+    }
+
+    // After the loop, delete all the invalid tokens found
+    if (tokensToDelete.length > 0) {
+        console.log(`Deleting ${tokensToDelete.length} invalid tokens...`);
+        const subscriptionsRef = adminDb.collection('subscriptions');
+        // Firestore 'in' query can handle up to 30 items at a time
+        const deleteBatches: Promise<any>[] = [];
+        for (let i = 0; i < tokensToDelete.length; i += 30) {
+            const batchTokens = tokensToDelete.slice(i, i + 30);
+            const q = subscriptionsRef.where('token', 'in', batchTokens);
+            const deletePromise = q.get().then(snapshot => {
+                if (snapshot.empty) return;
+                const batch = adminDb.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                return batch.commit();
+            });
+            deleteBatches.push(deletePromise);
+        }
+        await Promise.all(deleteBatches).catch(err => {
+            console.error("Error batch deleting invalid tokens:", err);
+        });
     }
 
     return NextResponse.json({ success: true, successCount, failureCount });
