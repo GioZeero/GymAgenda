@@ -11,15 +11,35 @@ const firebaseConfig: FirebaseOptions = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const messaging = async () => (await isSupported()) ? getMessaging(app) : null;
+// A helper to check if all necessary config values are present
+const isFirebaseConfigComplete = 
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId;
+
+const app = isFirebaseConfigComplete && !getApps().length ? initializeApp(firebaseConfig) : (getApps().length ? getApp() : null);
+
+const messaging = async () => {
+    if (!app || !(await isSupported())) {
+        return null;
+    }
+    return getMessaging(app);
+};
 
 export const requestNotificationPermission = async () => {
     const isClient = typeof window !== 'undefined';
     if (!isClient) return null;
 
     if (!process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
-        console.warn("VAPID key not found in .env.local. Notifications will not work.");
+        console.warn("VAPID key not found in environment variables. Notifications will not work.");
+        return null;
+    }
+    
+    if (!isFirebaseConfigComplete) {
+        console.warn("Firebase client configuration is incomplete. Notifications will not work.");
         return null;
     }
 
@@ -46,8 +66,7 @@ export const requestNotificationPermission = async () => {
 };
 
 export const registerServiceWorker = () => {
-    if ('serviceWorker' in navigator) {
-        // Pass the config as a query parameter to the service worker
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && isFirebaseConfigComplete) {
         const config = encodeURIComponent(JSON.stringify(firebaseConfig));
         navigator.serviceWorker
             .register(`/firebase-messaging-sw.js?firebaseConfig=${config}`)
@@ -55,7 +74,7 @@ export const registerServiceWorker = () => {
                 console.log('Service Worker registration successful, scope is:', registration.scope);
             })
             .catch((err) => {
-                console.log('Service Worker registration failed:', err);
+                console.error('Service Worker registration failed:', err);
             });
     }
 };
