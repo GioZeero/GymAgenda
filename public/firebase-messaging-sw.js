@@ -1,42 +1,55 @@
-// Import the Firebase scripts for the service worker
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+// This file must be in the public folder.
 
-// A helper function to parse query parameters from the service worker's URL
-const getQueryParam = (param) => {
-  const urlParams = new URLSearchParams(self.location.search);
-  return urlParams.get(param);
-};
+// Give the service worker access to Firebase Messaging.
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
 
-// Get the firebaseConfig JSON from the query parameter
-const firebaseConfigParam = getQueryParam('firebaseConfig');
+// Get Firebase config from the URL query parameter passed during registration.
+const urlParams = new URL(location).searchParams;
+const firebaseConfigStr = urlParams.get('firebaseConfig');
 
-if (firebaseConfigParam) {
-  // Parse the config object
-  const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigParam));
-  
-  // Initialize Firebase with the parsed config
-  firebase.initializeApp(firebaseConfig);
+if (firebaseConfigStr) {
+  try {
+    const firebaseConfig = JSON.parse(firebaseConfigStr);
 
-  // Retrieve an instance of Firebase Messaging to handle background messages.
-  const messaging = firebase.messaging();
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    
+    // Get an instance of Firebase Messaging
+    const messaging = firebase.messaging();
+    
+    console.log('Firebase Messaging Service Worker configured.');
 
-  // Set up the background message handler.
-  // This is triggered when the app is in the background or closed.
-  messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Received background message: ', payload);
+    // Add a listener for the 'push' event.
+    // This event is triggered when a push message is received when the app is in the background.
+    self.addEventListener('push', (event) => {
+      console.log('[Service Worker] Push Received.');
+      
+      // The data from the push event is in event.data.
+      // We expect it to be a JSON string, so we parse it.
+      const payload = event.data.json();
+      
+      console.log('[Service Worker] Push Payload: ', payload);
 
-    // Extract the title and body from the data payload sent from the server.
-    const notificationTitle = payload.data.title;
-    const notificationOptions = {
-      body: payload.data.body,
-      icon: '/icon.png', // Optional: You can add an icon.png to your /public folder
-    };
+      // We expect the custom data to be in `payload.data`.
+      const notificationTitle = payload.data.title;
+      const notificationOptions = {
+        body: payload.data.body,
+        // icon: '/your-icon.png' // You can add an icon here
+      };
 
-    // Display the notification to the user.
-    self.registration.showNotification(notificationTitle, notificationOptions);
-  });
+      // The waitUntil() method ensures that the service worker doesn't
+      // terminate before the notification is displayed.
+      event.waitUntil(
+        self.registration.showNotification(notificationTitle, notificationOptions)
+      );
+    });
+
+  } catch (error) {
+    console.error('Error initializing Firebase in Service Worker:', error);
+  }
 } else {
-  console.error('Firebase config not found in service worker. Notifications will not work.');
+    console.error('Firebase config not found in service worker query string.');
 }
-
