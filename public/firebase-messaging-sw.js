@@ -1,37 +1,34 @@
-// This file must be in the public folder.
-// It is imported and registered by the client.
+// Scripts for Firebase v9 compat library are easier for service workers
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// We need to import the Firebase SDKs
-try {
-    importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js');
-    importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-messaging-compat.js');
-    
-    // Get the Firebase config from the query string
-    const urlParams = new URLSearchParams(location.search);
-    const firebaseConfigParam = urlParams.get('firebaseConfig');
-    
-    if (!firebaseConfigParam) {
-        throw new Error("Firebase config not found in service worker query string.");
+const urlParams = new URLSearchParams(self.location.search);
+const firebaseConfigParam = urlParams.get('firebaseConfig');
+
+if (firebaseConfigParam) {
+    try {
+        const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigParam));
+        
+        if (firebase.apps.length === 0) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        const messaging = firebase.messaging();
+
+        messaging.onBackgroundMessage((payload) => {
+            console.log('[firebase-messaging-sw.js] Received background message ', payload);
+            
+            if (payload.notification) {
+                const notificationTitle = payload.notification.title;
+                const notificationOptions = {
+                    body: payload.notification.body,
+                };
+                self.registration.showNotification(notificationTitle, notificationOptions);
+            }
+        });
+    } catch(e) {
+        console.error("Error initializing Firebase in service worker", e);
     }
-
-    const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigParam));
-    
-    firebase.initializeApp(firebaseConfig);
-    
-    const messaging = firebase.messaging();
-    
-    messaging.onBackgroundMessage((payload) => {
-      console.log('[firebase-messaging-sw.js] Received background message ', payload);
-    
-      const notificationTitle = payload.notification.title;
-      const notificationOptions = {
-        body: payload.notification.body,
-        icon: '/dumbbell-icon.png' // You can create and place this icon in /public
-      };
-    
-      self.registration.showNotification(notificationTitle, notificationOptions);
-    });
-
-} catch (e) {
-    console.error("Error in service worker:", e);
+} else {
+    console.error("Firebase config not found in service worker query parameters.");
 }
