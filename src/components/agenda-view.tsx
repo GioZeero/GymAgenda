@@ -124,7 +124,7 @@ export default function AgendaView() {
             const data = docSnapshot.data();
             const transformSlot = (slot: any): Slot => ({
               ...slot,
-              bookedBy: Array.isArray(slot.bookedBy) ? slot.bookedBy : (slot.bookedBy ? [String(slot.bookedBy)] : []),
+              bookedBy: Array.isArray(slot.bookedBy) ? slot.bookedBy : [],
             });
 
             return {
@@ -188,26 +188,32 @@ export default function AgendaView() {
 
   const handleBookSlot = async (slotToBook: Slot) => {
     if (!db || !user) return;
-    
-    const dayOfWeek = schedule.find(day => day.morning.some(s => s.id === slotToBook.id) || day.afternoon.some(s => s.id === slotToBook.id))?.day;
+
+    const dayOfWeek = schedule.find(day => 
+        day.morning.some(s => s.id === slotToBook.id) || 
+        day.afternoon.some(s => s.id === slotToBook.id)
+    )?.day;
+
     if (!dayOfWeek) return;
 
     const dayRef = doc(db, 'schedule', dayOfWeek);
 
     try {
-        const isBooking = !slotToBook.bookedBy.includes(user.name);
-
         await runTransaction(db, async (transaction) => {
             const dayDoc = await transaction.get(dayRef);
             if (!dayDoc.exists()) {
                 throw "Il documento non esiste!";
             }
 
+            let wasBookingAction = false;
             const data = dayDoc.data();
+
             const updateSlots = (slots: Slot[]): Slot[] => {
                 return slots.map(s => {
                     if (s.id === slotToBook.id) {
-                        const newBookedBy = s.bookedBy.includes(user.name)
+                        const isBookedByUser = s.bookedBy.includes(user.name);
+                        wasBookingAction = !isBookedByUser;
+                        const newBookedBy = isBookedByUser
                             ? s.bookedBy.filter(name => name !== user.name)
                             : [...s.bookedBy, user.name].sort();
                         return { ...s, bookedBy: newBookedBy };
@@ -215,23 +221,27 @@ export default function AgendaView() {
                     return s;
                 });
             };
-
+            
             const updatedMorning = updateSlots(data.morning || []);
             const updatedAfternoon = updateSlots(data.afternoon || []);
+            
             transaction.update(dayRef, { morning: updatedMorning, afternoon: updatedAfternoon });
+            
+            return wasBookingAction;
+        }).then(async (isBooking) => {
+            if (isBooking) {
+                await sendNotification({
+                    targetRole: 'owner',
+                    title: 'Nuova prenotazione!',
+                    body: `${user.name} si è prenotato per ${slotToBook.timeRange} il giorno ${dayOfWeek}.`,
+                });
+            }
         });
-
-        if (isBooking) {
-            await sendNotification({
-                targetRole: 'owner',
-                title: 'Nuova prenotazione!',
-                body: `${user.name} si è prenotato per ${slotToBook.timeRange} il giorno ${dayOfWeek}.`,
-            });
-        }
     } catch (error) {
-        console.error("Errore nella prenotazione: ", error);
+        console.error("Errore nella transazione di prenotazione: ", error);
     }
   };
+
 
   const handleDeleteSlot = async (day: DayOfWeek, period: 'morning' | 'afternoon', slotId: string) => {
     if (!db) return;
