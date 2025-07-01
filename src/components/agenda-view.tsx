@@ -10,7 +10,7 @@ import { AddSlotModal } from './add-slot-modal';
 import { DeleteSlotModal } from './delete-slot-modal';
 import type { DayOfWeek, DaySchedule, Slot } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
-import { collection, doc, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from './ui/skeleton';
 import { ThemeToggle } from './theme-toggle';
@@ -93,28 +93,35 @@ export default function AgendaView() {
   }, [router]);
 
   useEffect(() => {
-    const fetchSchedule = async () => {
-      if (!user) return;
-      setLoading(true);
-      if (!db) {
+    if (!user) return; // Non fare nulla se l'utente non è ancora caricato
+
+    if (!db) {
+        console.warn("Il database Firestore non è disponibile.");
         setSchedule(initialScheduleData);
         setLoading(false);
         return;
-      }
-      try {
-        const scheduleCol = collection(db, 'schedule');
-        const scheduleSnapshot = await getDocs(scheduleCol);
-        if (scheduleSnapshot.empty) {
-          const batch = writeBatch(db);
-          initialScheduleData.forEach(daySchedule => {
-            const { day, ...dataToSet } = daySchedule;
-            const dayRef = doc(db, 'schedule', day);
-            batch.set(dayRef, dataToSet);
-          });
-          await batch.commit();
+    }
+
+    setLoading(true);
+    const scheduleCol = collection(db, 'schedule');
+    
+    const unsubscribe = onSnapshot(scheduleCol, (querySnapshot) => {
+        if (querySnapshot.empty) {
+          // Se la collezione è vuota, la inizializza con i dati predefiniti
+          const setupInitialSchedule = async () => {
+            const batch = writeBatch(db);
+            initialScheduleData.forEach(daySchedule => {
+              const { day, ...dataToSet } = daySchedule;
+              const dayRef = doc(db, 'schedule', day);
+              batch.set(dayRef, dataToSet);
+            });
+            await batch.commit();
+          };
+          setupInitialSchedule();
           setSchedule(initialScheduleData);
         } else {
-          const scheduleData = scheduleSnapshot.docs.map(docSnapshot => {
+          // Se esistono dati, li mappa nel nostro stato
+          const scheduleData = querySnapshot.docs.map(docSnapshot => {
             const data = docSnapshot.data();
             const transformSlot = (slot: any): Slot => ({
               ...slot,
@@ -134,15 +141,15 @@ export default function AgendaView() {
           
           setSchedule(scheduleData as DaySchedule[]);
         }
-      } catch (error) {
-        console.error("Error fetching schedule: ", error);
-        setSchedule(initialScheduleData);
-      } finally {
         setLoading(false);
-      }
-    };
+    }, (error) => {
+        console.error("Errore con il listener in tempo reale della pianificazione: ", error);
+        setSchedule(initialScheduleData); // Torna ai dati iniziali in caso di errore
+        setLoading(false);
+    });
 
-    fetchSchedule();
+    // Pulizia: Annulla l'iscrizione al listener quando il componente viene smontato
+    return () => unsubscribe();
   }, [user]);
 
   const handleLogout = () => {
@@ -162,6 +169,8 @@ export default function AgendaView() {
     
     const updatedDay = { ...dayData, [period]: updatedPeriodSlots, isOpen: true };
     
+    // Lo stato si aggiornerà automaticamente grazie al listener onSnapshot, 
+    // ma possiamo aggiornarlo localmente per una UI più reattiva
     setSchedule(currentSchedule => currentSchedule.map(d => (d.day === day ? updatedDay : d)));
 
     try {
@@ -173,7 +182,7 @@ export default function AgendaView() {
         });
     } catch (error) {
         console.error("Error adding slot: ", error);
-        setSchedule(originalSchedule);
+        setSchedule(originalSchedule); // Revert on error
     }
   };
 
@@ -207,8 +216,6 @@ export default function AgendaView() {
     const updatedMorning = updateSlots(dayData.morning);
     const updatedAfternoon = updateSlots(dayData.afternoon);
     
-    setSchedule(currentSchedule => currentSchedule.map(d => d.day === dayOfWeek ? {...d, morning: updatedMorning, afternoon: updatedAfternoon} : d));
-
     try {
         await updateDoc(dayRef, { morning: updatedMorning, afternoon: updatedAfternoon });
         if (isBooking) {
@@ -220,13 +227,12 @@ export default function AgendaView() {
         }
     } catch (error) {
         console.error("Error booking slot: ", error);
-        setSchedule(originalSchedule);
+        // Lo stato si ripristinerà automaticamente grazie al listener in caso di errore
     }
   };
 
   const handleDeleteSlot = async (day: DayOfWeek, period: 'morning' | 'afternoon', slotId: string) => {
     if (!db) return;
-    const originalSchedule = JSON.parse(JSON.stringify(schedule));
     const dayRef = doc(db, 'schedule', day);
     const dayData = schedule.find(d => d.day === day);
     if (!dayData) return;
@@ -235,17 +241,12 @@ export default function AgendaView() {
     
     const otherPeriod = period === 'morning' ? 'afternoon' : 'morning';
     const dayIsOpen = updatedPeriodSlots.length > 0 || dayData[otherPeriod].length > 0;
-
-    const updatedDay = { ...dayData, [period]: updatedPeriodSlots, isOpen: dayIsOpen };
     
-    setSchedule(currentSchedule => currentSchedule.map(d => (d.day === day ? updatedDay : d)));
-
     try {
         await updateDoc(dayRef, { [period]: updatedPeriodSlots, isOpen: dayIsOpen });
         setIsDeleteModalOpen(false);
     } catch (error) {
         console.error("Error deleting slot: ", error);
-        setSchedule(originalSchedule);
     }
   };
 
