@@ -8,7 +8,8 @@ const initializeAdmin = () => {
 
   try {
     const serviceAccount = {
-      projectId: process.env.FIREBASE_PROJECT_ID,
+      // Use the public project ID to ensure consistency with the client.
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       // Replace escaped newlines for Vercel
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
