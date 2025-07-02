@@ -72,11 +72,12 @@ export const registerServiceWorker = () => {
             return;
         }
 
-        // The URL is now the route that dynamically generates the service worker.
-        // No query string is needed because the config will be baked into the script.
-        const swUrl = `/firebase-messaging-sw.js`;
+        // The URL now points to a static file in the /public directory.
+        // This is a more stable approach that prevents the browser from
+        // thinking the service worker is constantly updating.
+        const swUrl = `/push-service-worker.js`;
 
-        console.log("Attempting to register Service Worker with URL:", swUrl);
+        console.log("Attempting to register Service Worker with static URL:", swUrl);
 
         navigator.serviceWorker
             .register(swUrl)
