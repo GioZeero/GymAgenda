@@ -26,14 +26,15 @@ export async function GET() {
       messaging.onBackgroundMessage((payload) => {
         console.log('[SW] Received background message: ', payload);
 
-        if (!payload.data || !payload.data.title) {
-            console.error('[SW] Payload data or title is missing.');
+        if (!payload.data || !payload.data.notificationTitle) {
+            console.error('[SW] Payload data or notificationTitle is missing.');
             return;
         }
 
-        const notificationTitle = payload.data.title;
+        const notificationTitle = payload.data.notificationTitle;
         const notificationOptions = {
-          body: payload.data.body,
+          body: payload.data.notificationBody,
+          tag: 'gym-agenda-notification'
         };
 
         self.registration.showNotification(notificationTitle, notificationOptions);
