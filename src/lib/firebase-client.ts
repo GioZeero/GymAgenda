@@ -72,10 +72,10 @@ export const registerServiceWorker = () => {
             return;
         }
 
-        const config = encodeURIComponent(JSON.stringify(firebaseConfig));
-        const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${config}`;
+        // The URL is now the route that dynamically generates the service worker.
+        // No query string is needed because the config will be baked into the script.
+        const swUrl = `/firebase-messaging-sw.js`;
 
-        // Diagnostic log to confirm the URL is correct
         console.log("Attempting to register Service Worker with URL:", swUrl);
 
         navigator.serviceWorker
