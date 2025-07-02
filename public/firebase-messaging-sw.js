@@ -1,53 +1,56 @@
-// This file MUST be in the public folder
+// These scripts are required for the Firebase SDK to work.
+importScripts("https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging-compat.js");
 
-// Using the Firebase SDK a little over v9. It is compatible with the v11 client SDK.
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
-
-console.log('Service Worker v5 (custom) is loading...');
-
-const urlParams = new URLSearchParams(self.location.search);
-const firebaseConfigStr = urlParams.get('firebaseConfig');
-
-if (firebaseConfigStr) {
-    // URLSearchParams automatically decodes the value, so we can parse it directly.
-    const firebaseConfig = JSON.parse(firebaseConfigStr);
-    
-    // Initialize Firebase
+// This is the function that will be called when the SW is registered.
+// It initializes Firebase.
+function initializeFirebase() {
     try {
-        console.log('[SW] Initializing Firebase...');
+        // self.location gives us the URL of the SW script, including query params.
+        const urlParams = new URLSearchParams(self.location.search);
+        const firebaseConfigStr = urlParams.get('firebaseConfig');
+        
+        if (!firebaseConfigStr) {
+            console.error("[SW] Firebase config not found in the query string. This is required for notifications to work. Please ensure the service worker is registered correctly.");
+            return null; // Return null if config is missing
+        }
+
+        const firebaseConfig = JSON.parse(decodeURIComponent(firebaseConfigStr));
+        
+        // Initialize the Firebase app in the service worker
         const app = firebase.initializeApp(firebaseConfig);
-        const messaging = firebase.messaging(app);
+        console.log("[SW] Firebase initialized successfully.");
+        
+        // Return the messaging instance
+        return firebase.messaging(app);
 
-        messaging.onBackgroundMessage((payload) => {
-            console.log('[SW] Received background message: ', payload);
-
-            // A 'data-only' message is expected from the server.
-            // Check if the payload has the data we need.
-            if (!payload.data || !payload.data.title) {
-                console.error('[SW] The message payload did not contain `data` or `data.title`.');
-                return;
-            }
-            
-            const notificationTitle = payload.data.title;
-            const notificationOptions = {
-                body: payload.data.body || '', // Ensure body exists, even if empty.
-                // Note: Icons can improve user experience but require the icon files to exist in /public.
-                // icon: '/icon-192x192.png',
-            };
-            
-            console.log('[SW] Showing custom notification:', notificationTitle, notificationOptions);
-            
-            // Use waitUntil to ensure the browser doesn't terminate the service
-            // worker before our notification has been displayed.
-            self.registration.showNotification(notificationTitle, notificationOptions);
-        });
-
-        console.log('[SW] Background message handler has been set successfully.');
-
-    } catch (error) {
-        console.error('[SW] Error during Firebase initialization or handler setup:', error);
+    } catch (e) {
+        console.error("[SW] Error during Firebase initialization: ", e);
+        return null;
     }
-} else {
-    console.error('[SW] Firebase config not found in the query string. This is required.');
+}
+
+// Initialize Firebase and get the messaging instance.
+const messaging = initializeFirebase();
+
+// If initialization was successful, set up the background message handler.
+if (messaging) {
+    messaging.onBackgroundMessage((payload) => {
+        console.log('[SW] Received background message: ', payload);
+    
+        // Check if the payload has the data we expect.
+        if (!payload || !payload.data || !payload.data.title) {
+            console.log("[SW] Received a push message without the expected data format.");
+            return;
+        }
+        
+        const notificationTitle = payload.data.title;
+        const notificationOptions = {
+            body: payload.data.body,
+            icon: '/icon-192x192.png', // A default icon for the notification
+        };
+    
+        // Show the notification.
+        self.registration.showNotification(notificationTitle, notificationOptions);
+    });
 }
