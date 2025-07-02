@@ -1,24 +1,22 @@
-// This is a static file, which is more stable than a dynamically generated one.
-// It ensures the browser doesn't constantly think the file has changed,
-// which was the cause of the repeated "site updated" notifications.
-console.log('[SW] Static Push Service Worker v1 loaded.');
+// This console.log helps us confirm that the browser is loading the new version of the SW.
+console.log('[SW] Static Service Worker v1 loaded.');
 
+// The 'install' event is fired when the service worker is first installed.
 self.addEventListener('install', (event) => {
   console.log('[SW] Installed.');
-  // This is a best practice. It ensures that any new version of the service worker
-  // activates immediately, rather than waiting for all old tabs to be closed.
+  // This forces the waiting service worker to become the active service worker.
   event.waitUntil(self.skipWaiting());
 });
 
+// The 'activate' event is fired when the service worker becomes active.
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activated.');
-  // This allows an active service worker to take control of the page immediately,
-  // which is useful for ensuring notifications work right away after an update.
+  // This allows an active service worker to take control of the page immediately.
   event.waitUntil(self.clients.claim());
 });
 
 // The 'push' event is the core of our notification logic.
-// It's triggered when a push message is received from the FCM server.
+// It's triggered when a push message is received from the server.
 self.addEventListener('push', (event) => {
   console.log('[SW] Push Received.');
   
@@ -28,29 +26,26 @@ self.addEventListener('push', (event) => {
   }
 
   try {
-    // The data sent from our server is a JSON string.
+    // The data sent from the Firebase Admin SDK is a JSON string.
     const pushData = event.data.json();
     console.log('[SW] Push data parsed:', pushData);
 
-    // Our custom data is nested in the 'data' property by the Firebase Admin SDK.
+    // Our custom data is nested in the 'data' property.
     const notificationData = pushData.data;
 
     if (!notificationData || !notificationData.notificationTitle || !notificationData.notificationBody) {
       console.error('[SW] Incomplete notification data in payload:', notificationData);
-      // Even if data is incomplete, we should not show a generic notification.
       return;
     }
 
     const title = notificationData.notificationTitle;
     const options = {
       body: notificationData.notificationBody,
-      // Using a generic icon is safer. You can update this to a real path.
-      icon: '/favicon.ico', 
-      // A tag ensures that subsequent notifications with the same tag replace old ones.
-      tag: 'gym-agenda-notification' 
+      icon: '/favicon.ico', // You can replace this with a real icon path
+      tag: 'gym-agenda-notification' // A tag ensures that subsequent notifications replace old ones.
     };
 
-    // This is the native browser command to show the notification.
+    // This is the command that actually shows the notification to the user.
     event.waitUntil(self.registration.showNotification(title, options));
 
   } catch (error) {
