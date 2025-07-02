@@ -47,7 +47,6 @@ export async function GET() {
   return new Response(scriptContent, {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'public, max-age=604800, immutable',
     },
   });
 }
