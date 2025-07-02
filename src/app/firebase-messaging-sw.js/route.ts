@@ -27,7 +27,7 @@ export async function GET() {
         console.log('[SW] Received background message: ', payload);
 
         if (!payload.data || !payload.data.notificationTitle) {
-            console.error('[SW] Payload data or notificationTitle is missing.');
+            console.log('[SW] This message did not have our expected custom data. Ignoring.');
             return;
         }
 
@@ -47,6 +47,7 @@ export async function GET() {
   return new Response(scriptContent, {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'public, max-age=604800, immutable',
     },
   });
 }
