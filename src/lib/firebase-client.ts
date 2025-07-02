@@ -66,10 +66,20 @@ export const requestNotificationPermission = async () => {
 };
 
 export const registerServiceWorker = () => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && isFirebaseConfigComplete) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        if (!isFirebaseConfigComplete) {
+            console.warn("Firebase client configuration is incomplete. Service Worker not registered.");
+            return;
+        }
+
         const config = encodeURIComponent(JSON.stringify(firebaseConfig));
+        const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${config}`;
+
+        // Diagnostic log to confirm the URL is correct
+        console.log("Attempting to register Service Worker with URL:", swUrl);
+
         navigator.serviceWorker
-            .register(`/firebase-messaging-sw.js?firebaseConfig=${config}`)
+            .register(swUrl)
             .then((registration) => {
                 console.log('Service Worker registration successful, scope is:', registration.scope);
             })
