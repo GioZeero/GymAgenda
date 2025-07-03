@@ -1,50 +1,67 @@
-/**
- * This service worker handles incoming push notifications.
- * It's intentionally kept simple and static to ensure stability and
- * prevent the browser from generating "site updated" notifications.
- */
+// A completely vanilla service worker for handling push notifications.
 
-// When a push notification is received
-self.addEventListener('push', function (event) {
-  // Default data if the push message is empty
-  let notificationData = {
-    title: 'Nuova notifica',
-    body: 'Hai un nuovo messaggio.',
-    icon: '/icon-192.png' // A default icon
-  };
-
-  // Try to parse the data from the push event
-  if (event.data) {
-    try {
-      const payload = event.data.json();
-      notificationData = {
-        title: payload.notificationTitle,
-        body: payload.notificationBody,
-        icon: '/icon-192.png' // You can customize this
-      };
-    } catch (e) {
-      console.error('Push event data parsing error:', e);
-    }
-  }
-
-  const title = notificationData.title;
-  const options = {
-    body: notificationData.body,
-    icon: notificationData.icon,
-  };
-
-  // Show the notification
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-// When the service worker is installed
+// This event is fired when the service worker is installed.
 self.addEventListener('install', (event) => {
-  // This forces the waiting service worker to become the active service worker.
+  console.log('[Service Worker] Install');
+  // Forces the waiting service worker to become the active service worker.
   event.waitUntil(self.skipWaiting());
 });
 
-// When the service worker is activated
+// This event is fired when the service worker is activated.
 self.addEventListener('activate', (event) => {
-  // This allows an active service worker to take control of the page immediately.
+  console.log('[Service Worker] Activate');
+  // Ensures that the service worker takes control of the page immediately.
   event.waitUntil(self.clients.claim());
+});
+
+// This is the main event for handling push notifications.
+self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push Received.');
+  
+  let data;
+  try {
+    // The push data is expected to be a JSON string.
+    data = event.data.json();
+  } catch (e) {
+    console.error('[Service Worker] Push event contains non-JSON data.', e);
+    return;
+  }
+
+  console.log('[Service Worker] Push data: ', data);
+
+  // The 'data' object from FCM is nested within another 'data' object.
+  const payload = data.data || {};
+  
+  const title = payload.notificationTitle || 'Nuova Notifica';
+  const options = {
+    body: payload.notificationBody || 'Hai ricevuto un nuovo messaggio.',
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// This event is fired when a user clicks on the notification.
+self.addEventListener('notificationclick', (event) => {
+  console.log('[Service Worker] Notification click Received.');
+
+  event.notification.close();
+
+  // This opens the app's URL and focuses an existing window if available.
+  event.waitUntil(
+    clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    }).then((clientList) => {
+      for (const client of clientList) {
+        // If a window is already open, focus it.
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise, open a new window.
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });
