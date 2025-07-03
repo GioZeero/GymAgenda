@@ -15,6 +15,9 @@ import { db } from '@/lib/firebase';
 import { Skeleton } from './ui/skeleton';
 import { ThemeToggle } from './theme-toggle';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { onMessage } from 'firebase/messaging';
+import { useToast } from '@/hooks/use-toast';
+import { messaging } from '@/lib/firebase-client';
 
 const initialScheduleData: DaySchedule[] = [
   { day: 'Lunedì', morning: [], afternoon: [], isOpen: false },
@@ -77,6 +80,7 @@ export default function AgendaView() {
   const [modalPeriod, setModalPeriod] = useState<'morning' | 'afternoon'>('morning');
   const [bookingSlotId, setBookingSlotId] = useState<string | null>(null);
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     const storedUser = localStorage.getItem('gymUser');
@@ -92,6 +96,32 @@ export default function AgendaView() {
     }
     setCheckingAuth(false);
   }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Gestore per le notifiche quando l'app è in primo piano
+    const setupForegroundMessageHandler = async () => {
+      try {
+        const messagingInstance = await messaging();
+        if (messagingInstance) {
+          onMessage(messagingInstance, (payload) => {
+            console.log('Messaggio ricevuto in primo piano: ', payload);
+            if (payload.data) {
+                toast({
+                    title: payload.data.notificationTitle,
+                    description: payload.data.notificationBody,
+                });
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Errore nell'impostare il gestore di messaggi in primo piano:", error);
+      }
+    };
+    
+    setupForegroundMessageHandler();
+  }, [user, toast]);
 
   useEffect(() => {
     if (!user) return;
