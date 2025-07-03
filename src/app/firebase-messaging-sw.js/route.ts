@@ -1,40 +1,17 @@
 import { NextResponse } from 'next/server';
 
+// This dynamic route has been replaced by the static file in /public/firebase-messaging-sw.js
+// It is intentionally left blank to avoid conflicts and unpredictable browser behavior.
 export async function GET() {
-  const scriptContent = `
-    self.addEventListener('install', (event) => {
-      self.skipWaiting();
-    });
-
-    self.addEventListener('activate', (event) => {
-      event.waitUntil(self.clients.claim());
-    });
-
-    self.addEventListener('push', (event) => {
-      if (!event.data) {
-        return;
-      }
-
-      let payload;
-      try {
-        payload = event.data.json();
-      } catch (e) {
-        payload = { data: { notificationTitle: 'New Message', notificationBody: event.data.text() } };
-      }
-
-      const title = payload.data?.notificationTitle || 'GymAgenda';
-      const options = {
-        body: payload.data?.notificationBody || 'You have a new notification.',
-      };
-
-      event.waitUntil(self.registration.showNotification(title, options));
-    });
-  `;
-
+  const scriptContent = `/* 
+    This service worker is intentionally left blank.
+    The active service worker is now located at /firebase-messaging-sw.js 
+    (served from the /public directory).
+  */`;
+  
   return new Response(scriptContent, {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'public, max-age=604800, immutable',
     },
   });
 }
