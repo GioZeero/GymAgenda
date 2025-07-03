@@ -24,15 +24,14 @@ const app = isFirebaseConfigComplete && !getApps().length ? initializeApp(fireba
 
 export const messaging = async (): Promise<Messaging | null> => {
     if (!app || !(await isSupported())) {
+        console.log("Firebase Messaging is not supported in this browser.");
         return null;
     }
     return getMessaging(app);
 };
 
 export const requestNotificationPermission = async () => {
-    const isClient = typeof window !== 'undefined';
-    // Ensure service workers are supported
-    if (!isClient || !('serviceWorker' in navigator)) {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
         console.log("Service workers are not supported in this browser.");
         return null;
     }
@@ -49,30 +48,23 @@ export const requestNotificationPermission = async () => {
 
     try {
         const messagingInstance = await messaging();
-        if (!messagingInstance) {
-            console.log("Firebase Messaging is not supported in this browser.");
-            return null;
-        }
-
-        // 1. Manually register our static service worker
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        console.log('Service Worker registered manually:', registration);
+        if (!messagingInstance) return null;
 
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-            // 2. Pass our own registration to getToken to prevent Firebase from re-registering
+            console.log('Notification permission granted.');
+            // getToken will use the default service worker file at /firebase-messaging-sw.js
             const token = await getToken(messagingInstance, {
                 vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-                serviceWorkerRegistration: registration,
             });
-            console.log('FCM Token obtained using manual registration:', token);
+            console.log('FCM Token obtained:', token);
             return token;
         } else {
             console.log('Unable to get permission to notify.');
             return null;
         }
     } catch (error) {
-        console.error('An error occurred while retrieving token or registering service worker. ', error);
+        console.error('An error occurred while retrieving token. ', error);
         return null;
     }
 };
