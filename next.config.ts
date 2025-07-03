@@ -21,8 +21,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // This regex matches the service worker file and any potential workbox files
-        source: '/((firebase-)?messaging-sw.js|workbox-.*.js)',
+        // This targets the service worker file specifically to apply caching headers
+        source: '/firebase-messaging-sw.js',
         headers: [
           {
             key: 'Cache-Control',
