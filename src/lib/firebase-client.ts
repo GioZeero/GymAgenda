@@ -31,7 +31,11 @@ export const messaging = async (): Promise<Messaging | null> => {
 
 export const requestNotificationPermission = async () => {
     const isClient = typeof window !== 'undefined';
-    if (!isClient) return null;
+    // Ensure service workers are supported
+    if (!isClient || !('serviceWorker' in navigator)) {
+        console.log("Service workers are not supported in this browser.");
+        return null;
+    }
 
     if (!process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
         console.warn("VAPID key not found in environment variables. Notifications will not work.");
@@ -50,19 +54,25 @@ export const requestNotificationPermission = async () => {
             return null;
         }
 
+        // 1. Manually register our static service worker
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log('Service Worker registered manually:', registration);
+
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-            // getToken will automatically register the default service worker: /firebase-messaging-sw.js
-            // which will be served by our dynamic route.
-            const token = await getToken(messagingInstance, { vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY });
-            console.log('FCM Token obtained and service worker registered:', token);
+            // 2. Pass our own registration to getToken to prevent Firebase from re-registering
+            const token = await getToken(messagingInstance, {
+                vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+                serviceWorkerRegistration: registration,
+            });
+            console.log('FCM Token obtained using manual registration:', token);
             return token;
         } else {
             console.log('Unable to get permission to notify.');
             return null;
         }
     } catch (error) {
-        console.error('An error occurred while retrieving token. ', error);
+        console.error('An error occurred while retrieving token or registering service worker. ', error);
         return null;
     }
 };
