@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server';
-
 // This dynamic route is no longer used and is intentionally left blank.
 // The active service worker is now the static file located at /public/firebase-messaging-sw.js.
 // This route is kept to prevent 404 errors from old cached versions of the site.
