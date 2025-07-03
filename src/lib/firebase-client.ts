@@ -52,8 +52,9 @@ export const requestNotificationPermission = async () => {
 
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
+            // getToken will automatically register the default service worker: /firebase-messaging-sw.js
             const token = await getToken(messagingInstance, { vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY });
-            console.log('FCM Token:', token);
+            console.log('FCM Token obtained and service worker registered:', token);
             return token;
         } else {
             console.log('Unable to get permission to notify.');
@@ -65,27 +66,13 @@ export const requestNotificationPermission = async () => {
     }
 };
 
+// The registerServiceWorker function is no longer needed.
+// Firebase's getToken() method handles the registration of the
+// default 'firebase-messaging-sw.js' file automatically.
+// This avoids conflicts from multiple registration attempts.
 export const registerServiceWorker = () => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        if (!isFirebaseConfigComplete) {
-            console.warn("Firebase client configuration is incomplete. Service Worker not registered.");
-            return;
-        }
-
-        // The URL now points to a static file in the /public directory.
-        // This is a more stable approach that prevents the browser from
-        // thinking the service worker is constantly updating.
-        const swUrl = `/push-service-worker.js`;
-
-        console.log("Attempting to register Service Worker with static URL:", swUrl);
-
-        navigator.serviceWorker
-            .register(swUrl)
-            .then((registration) => {
-                console.log('Service Worker registration successful, scope is:', registration.scope);
-            })
-            .catch((err) => {
-                console.error('Service Worker registration failed:', err);
-            });
+    // This function is intentionally left empty.
+    if (typeof window !== 'undefined') {
+        console.log("Service worker registration is now handled automatically by Firebase. This function is deprecated.");
     }
 };
