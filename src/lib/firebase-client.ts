@@ -66,14 +66,3 @@ export const requestNotificationPermission = async () => {
         return null;
     }
 };
-
-// The registerServiceWorker function is no longer needed.
-// Firebase's getToken() method handles the registration of the
-// default 'firebase-messaging-sw.js' file automatically.
-// This avoids conflicts from multiple registration attempts.
-export const registerServiceWorker = () => {
-    // This function is intentionally left empty.
-    if (typeof window !== 'undefined') {
-        console.log("Service worker registration is now handled automatically by Firebase. This function is deprecated.");
-    }
-};
