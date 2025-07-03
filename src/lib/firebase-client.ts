@@ -1,6 +1,6 @@
 'use client';
 import { getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app';
-import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { getMessaging, getToken, isSupported, type Messaging } from 'firebase/messaging';
 
 const firebaseConfig: FirebaseOptions = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,7 +22,7 @@ const isFirebaseConfigComplete =
 
 const app = isFirebaseConfigComplete && !getApps().length ? initializeApp(firebaseConfig) : (getApps().length ? getApp() : null);
 
-const messaging = async () => {
+export const messaging = async (): Promise<Messaging | null> => {
     if (!app || !(await isSupported())) {
         return null;
     }
@@ -53,6 +53,7 @@ export const requestNotificationPermission = async () => {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
             // getToken will automatically register the default service worker: /firebase-messaging-sw.js
+            // which will be served by our dynamic route.
             const token = await getToken(messagingInstance, { vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY });
             console.log('FCM Token obtained and service worker registered:', token);
             return token;
