@@ -35,6 +35,12 @@ self.addEventListener('push', (event) => {
   const title = payload.notificationTitle || 'Nuova Notifica';
   const options = {
     body: payload.notificationBody || 'Hai ricevuto un nuovo messaggio.',
+    // Utilizza una combinazione di titolo e corpo come tag per identificare univocamente la notifica
+    // Questo aiuta a prevenire la visualizzazione di notifiche duplicate se il payload non fornisce un ID univoco.
+    tag: `${title}-${payload.notificationBody}`,
+    // Impedisce la visualizzazione di più notifiche con lo stesso tag contemporaneamente.
+    // Le nuove notifiche sostituiranno quelle vecchie con lo stesso tag.
+    renotify: true
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
