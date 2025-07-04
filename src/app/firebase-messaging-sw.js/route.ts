@@ -42,12 +42,12 @@ export async function GET() {
 
     self.addEventListener('install', (event) => {
         console.log('Service Worker: Installing...');
-        self.skipWaiting();
+        // self.skipWaiting(); // Commentato per evitare l'attivazione immediata e la notifica di aggiornamento
     });
 
     self.addEventListener('activate', (event) => {
         console.log('Service Worker: Activating...');
-        event.waitUntil(self.clients.claim());
+        // event.waitUntil(self.clients.claim()); // Commentato per evitare l'attivazione immediata e la notifica di aggiornamento
     });
   `;
 
