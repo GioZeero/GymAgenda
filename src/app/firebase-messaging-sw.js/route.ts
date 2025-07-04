@@ -7,6 +7,8 @@ export async function GET() {
   const firebaseVersion = '10.12.3';
 
   const scriptContent = `
+    console.log('******** SERVICE WORKER VERSIONE PROVA GIOZEERO - ${new Date().toISOString()} ********'); // MODIFICA EVIDENTE
+
     importScripts("https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-app-compat.js");
     importScripts("https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-messaging-compat.js");
 
