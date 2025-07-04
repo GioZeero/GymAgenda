@@ -54,11 +54,13 @@ export const requestNotificationPermission = async () => {
         if (permission === 'granted') {
             console.log('Notification permission granted.');
             // getToken will use the default service worker file at /firebase-messaging-sw.js
-            const token = await getToken(messagingInstance, {
-                vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-            });
-            console.log('FCM Token obtained:', token);
-            return token;
+            // const token = await getToken(messagingInstance, {
+            //     vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+            // });
+            // console.log('FCM Token obtained:', token);
+            // return token;
+            console.log('[TEST] Service worker registration via getToken is temporarily disabled.');
+            return null; // Impedisce la registrazione del SW e l'ottenimento del token
         } else {
             console.log('Unable to get permission to notify.');
             return null;
