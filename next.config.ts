@@ -21,12 +21,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // This targets the service worker file specifically to apply caching headers
-        source: '/firebase-messaging-sw.js',
+        // Applica header di Cache-Control al nuovo service worker statico
+        source: '/custom-firebase-sw.js',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate', // Modificato per forzare il recheck
+            // 'no-cache' dice al browser di ricontrollare sempre con il server (validazione ETag/Last-Modified)
+            // 'max-age=0' è simile ma alcuni proxy potrebbero cachare.
+            // 'must-revalidate' assicura che la cache non venga usata se scaduta.
+            value: 'public, max-age=0, must-revalidate',
           },
         ],
       },
