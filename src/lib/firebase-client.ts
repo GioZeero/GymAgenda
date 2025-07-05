@@ -80,7 +80,8 @@ const app = isFirebaseConfigComplete && !getApps().length ? initializeApp(fireba
 // }
 
 // --- Nuova Logica per Fase 2 ---
-import { getMessaging, getToken, isSupported, type Messaging } from 'firebase/messaging';
+// L'importazione di getMessaging, getToken, isSupported, type Messaging è già presente all'inizio del file.
+// Rimuoviamo questa duplicata.
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
