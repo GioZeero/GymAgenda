@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Dumbbell } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { requestNotificationPermission } from '@/lib/firebase-client';
+import { initializePushNotifications } from '@/lib/firebase-client'; // Modificato import
 
 export default function Home() {
   const [role, setRole] = useState<'owner' | 'client'>('client');
@@ -26,18 +26,28 @@ export default function Home() {
     }
   }, [router]);
 
-  const subscribeToNotifications = async (user: { name: string; role: string }) => {
-    const token = await requestNotificationPermission();
-    if (token) {
-        try {
-            await fetch('/api/subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...user, token }),
-            });
-        } catch (error) {
-            console.error("Failed to subscribe user:", error);
-        }
+  const handleSubscription = async (fcmToken: string, userName: string, userRole: 'owner' | 'client') => {
+    console.log('FCM Token received in UI for subscription:', fcmToken);
+    try {
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: userName, // Nome utente
+          role: userRole,   // Ruolo utente
+          token: fcmToken, // Token FCM
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log('Subscription to backend successful!');
+      } else {
+        console.error('Subscription to backend failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Error subscribing to backend:', error);
     }
   };
 
@@ -46,7 +56,19 @@ export default function Home() {
     if (name.trim()) {
       const user = { role, name: name.trim() };
       localStorage.setItem('gymUser', JSON.stringify(user));
-      await subscribeToNotifications(user);
+
+      // Inizializza le notifiche push e passa il callback per la sottoscrizione
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          console.log('Requesting notification permission and initializing push...');
+          initializePushNotifications((token) => handleSubscription(token, user.name, user.role));
+        } else if (Notification.permission === 'granted') {
+          console.log('Notification permission already granted. Initializing push...');
+          initializePushNotifications((token) => handleSubscription(token, user.name, user.role));
+        } else {
+          console.log('Notification permission was denied. Skipping push initialization.');
+        }
+      }
       router.push(`/agenda`);
     }
   };
